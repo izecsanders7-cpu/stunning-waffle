@@ -46,13 +46,7 @@ wss.on('connection', (ws) => {
         send(ws, { type: 'registered' });
         break;
       }
-
-      case 'register-viewer': {
-        if (msg.key !== VIEWER_KEY) {
-          send(ws, { type: 'error', message: 'Invalid viewer key' });
-          ws.close();
-          return;
-        }
+        case'register-viewer':{
         ws.role = 'viewer';
         viewers.set(ws.id, ws);
         send(ws, { type: 'registered', viewerId: ws.id });
