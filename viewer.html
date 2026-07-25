@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live View</title>
+<style>
+  body { margin:0; background:#111; color:#eee; font-family: system-ui, sans-serif; }
+  #video { width:100%; max-height:80vh; background:#000; }
+  .bar { padding:12px; display:flex; gap:8px; flex-wrap:wrap; }
+  input { flex:1; min-width:140px; padding:10px; border-radius:8px; border:1px solid #444; background:#222; color:#eee; }
+  button { padding:10px 14px; border-radius:8px; border:none; background:#3b82f6; color:white; font-weight:600; }
+  #status { padding:0 12px 12px; font-size:14px; opacity:0.85; }
+  .ok { color:#4ade80; }
+  .err { color:#f87171; }
+</style>
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
+  <div class="bar">
+    <input id="key" type="password" placeholder="Viewer passcode">
+    <input id="server" type="text" placeholder="wss://your-server.example.com">
+    <button id="connectBtn">Watch</button>
+  </div>
+  <div id="status">Not connected.</div>
+
+<script>
+const video = document.getElementById('video');
+const statusEl = document.getElementById('status');
+const connectBtn = document.getElementById('connectBtn');
+const keyInput = document.getElementById('key');
+const serverInput = document.getElementById('server');
+
+let ws, pc;
+
+const iceServers = [
+  { urls: 'stun:stun.l.google.com:19302' }
+  // Add a TURN server here too if connections fail (see broadcaster.html comment)
+];
+
+function setStatus(msg, kind) {
+  statusEl.textContent = msg;
+  statusEl.className = kind || '';
+}
+
+function connect() {
+  const key = keyInput.value.trim();
+  const serverUrl = serverInput.value.trim();
+  if (!key || !serverUrl) { setStatus('Enter passcode and server address.', 'err'); return; }
+
+  ws = new WebSocket(serverUrl);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'register-viewer', key }));
+  };
+
+  ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === 'registered') {
+      setStatus('Connected. Waiting for camera...', 'ok');
+    } else if (msg.type === 'error') {
+      setStatus('Error: ' + msg.message, 'err');
+    } else if (msg.type === 'broadcaster-offline') {
+      setStatus('Camera is currently offline.', 'err');
+    } else if (msg.type === 'offer') {
+      await handleOffer(msg.sdp);
+    } else if (msg.type === 'ice-candidate') {
+      if (pc && msg.candidate) await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+    }
+  };
+
+  ws.onclose = () => setStatus('Disconnected from server.', 'err');
+  ws.onerror = () => setStatus('Connection error.', 'err');
+}
+
+async function handleOffer(sdp) {
+  pc = new RTCPeerConnection({ iceServers });
+
+  pc.ontrack = (event) => {
+    video.srcObject = event.streams[0];
+    setStatus('Live.', 'ok');
+  };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      ws.send(JSON.stringify({ type: 'ice-candidate', candidate: e.candidate }));
+    }
+  };
+
+  await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  ws.send(JSON.stringify({ type: 'answer', sdp: answer }));
+}
+
+connectBtn.addEventListener('click', () => {
+  connectBtn.disabled = true;
+  connect();
+});
+</script>
+</body>
+</html>

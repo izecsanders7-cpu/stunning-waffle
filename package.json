@@ -1,0 +1,13 @@
+{
+  "name": "petcam-remote",
+  "version": "1.0.0",
+  "description": "Custom remote camera streaming for pet/plant check-ins",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.17.0"
+  }
+}
